@@ -1,4 +1,6 @@
 from flask import Flask, request, jsonify
+import re
+from ipaddress import ip_address, IPv4Address
 from flask_jwt_extended import (
     JWTManager, jwt_required, create_access_token,
     get_jwt_identity
@@ -12,6 +14,26 @@ app.debug = True
 app.config['JWT_SECRET_KEY'] = 't1NP63m4wnBg6nyHYKfmc2TpCOGI4nss'
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 300
 jwt = JWTManager(app)
+
+def is_valid_ip(ip_str):
+    try:
+        return isinstance(ip_address(ip_str), IPv4Address)
+    except ValueError:
+        return False
+
+def is_valid_ports(ports_str):
+    return bool(re.match("^[\d,]+$", ports_str))
+
+def validate_inputs(source_ip, source_ports, destination_ip, destination_ports):
+    if not is_valid_ip(source_ip) and source_ip != "0":
+        return False, 'La dirección IP de origen no es válida'
+    if not is_valid_ports(source_ports):
+        return False, 'Los puertos de origen no son válidos'
+    if not is_valid_ip(destination_ip):
+        return False, 'La dirección IP de destino no es válida'
+    if not is_valid_ports(destination_ports):
+        return False, 'Los puertos de destino no son válidos'
+    return True, ''
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -34,6 +56,10 @@ def add_rule():
     source_ports = data['source_port'].split(',')
     destination_ip = data['destination_ip']
     destination_ports = data['destination_port'].split(',')
+
+    valid, message = validate_inputs(source_ip, ','.join(source_ports), destination_ip, ','.join(destination_ports))
+    if not valid:
+        return jsonify({'message': message}), 400 
 
     if len(source_ports) == len(destination_ports):
         add_iptables_rules(source_ip, source_ports, destination_ip, destination_ports)
